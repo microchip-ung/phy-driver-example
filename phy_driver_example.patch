@@ -1,16 +1,27 @@
 diff --git a/vtss_api/mepa/CMakeLists.txt b/vtss_api/mepa/CMakeLists.txt
-index 1c30e38..4af97c8 100644
+index 00e2190..c2fad23 100644
 --- a/vtss_api/mepa/CMakeLists.txt
 +++ b/vtss_api/mepa/CMakeLists.txt
-@@ -25,6 +25,7 @@ add_subdirectory(intel)
- add_subdirectory(ksz9031)
+@@ -26,6 +26,7 @@ add_subdirectory(ksz9031)
  add_subdirectory(microchip)
  add_subdirectory(vtss)
+ add_subdirectory(dummy_phy)
 +add_subdirectory(example)
  
  
  ###############################################################################
-@@ -78,8 +79,8 @@ MEPA_LIB(LIB_NAME mepa_sparx5_bringup ADVANCED
+@@ -41,8 +42,8 @@ MEPA_LIB(LIB_NAME mepa
+ ## and other higher layer of applications                                    ##
+ ###############################################################################
+ MEPA_LIB(LIB_NAME mepa_caracal ADVANCED
+-         DEFS     -DMEPA_HAS_VTSS
+-         DRVS     mepa_drv_vtss)
++         DEFS     -DMEPA_HAS_VTSS -DMEPA_HAS_EXAMPLE
++         DRVS     mepa_drv_vtss    mepa_drv_example)
+ 
+ MEPA_LIB(LIB_NAME mepa_jr2 ADVANCED
+          DEFS     -DMEPA_HAS_VTSS       -DMEPA_HAS_AQR  -DMEPA_HAS_GPY2211
+@@ -81,8 +82,8 @@ MEPA_LIB(LIB_NAME mepa_sparx5_bringup ADVANCED
           DRVS     mepa_drv_vtss_10g_ts)
  
  MEPA_LIB(LIB_NAME mepa_lan966x ADVANCED
@@ -19,15 +30,15 @@ index 1c30e38..4af97c8 100644
 +         DEFS     -DMEPA_HAS_VTSS  -DMEPA_HAS_KSZ9031  -D MEPA_HAS_LAN8814 -DMEPA_HAS_LAN884x -DMEPA_HAS_EXAMPLE
 +         DRVS     mepa_drv_vtss    mepa_drv_ksz9031    mepa_drv_lan8814   mepa_drv_lan884x     mepa_drv_example)
  
- MEPA_LIB(LIB_NAME mepa_lmstax_lan966x ADVANCED
+ MEPA_LIB(LIB_NAME mepa_velocitysp_lan966x ADVANCED
           DEFS     -DMEPA_HAS_LAN8814
 diff --git a/vtss_api/mepa/common/include/mepa_driver.h b/vtss_api/mepa/common/include/mepa_driver.h
-index 56ffaef..58781fe 100644
+index 9010587..6b187b7 100644
 --- a/vtss_api/mepa/common/include/mepa_driver.h
 +++ b/vtss_api/mepa/common/include/mepa_driver.h
-@@ -803,5 +803,8 @@ mepa_drivers_t mepa_lan8770_driver_init();
- /** \brief Returns drivers for lan884x PHY */
- mepa_drivers_t mepa_lan884x_driver_init();
+@@ -922,5 +922,8 @@ mepa_drivers_t mepa_lan887x_driver_init(void);
+ mepa_drivers_t mepa_dummy_driver_init();
+ 
  
 +/* Example PHY driver */
 +mepa_drivers_t mepa_xxx_driver_init();
@@ -35,24 +46,24 @@ index 56ffaef..58781fe 100644
  #include <microchip/ethernet/hdr_end.h>
  #endif /**< _MICROCHIP_ETHERNET_PHY_API_PHY_DRV_H_ */
 diff --git a/vtss_api/mepa/common/src/phy.c b/vtss_api/mepa/common/src/phy.c
-index 18012c4..8f41a36 100644
+index 0505b81..d64d733 100644
 --- a/vtss_api/mepa/common/src/phy.c
 +++ b/vtss_api/mepa/common/src/phy.c
-@@ -216,9 +216,13 @@ struct mepa_device *mepa_create(const mepa_callout_t    MEPA_SHARED_PTR *callout
- #if defined(MEPA_HAS_LAN884x)
-         MEPA_phy_lib[8] = mepa_lan884x_driver_init();
+@@ -222,9 +222,13 @@ struct mepa_device *mepa_create(const mepa_callout_t    MEPA_SHARED_PTR *callout
+ #if defined(MEPA_HAS_DUMMY_PHY)
+         MEPA_phy_lib[10] = mepa_dummy_driver_init();
  #endif
 +#if defined(MEPA_HAS_EXAMPLE)
-+	MEPA_phy_lib[9] = mepa_xxx_driver_init();
++	MEPA_phy_lib[11] = mepa_xxx_driver_init();
 +#endif
 +
          // Shall be last
  #if defined(MEPA_HAS_VTSS)
--        MEPA_phy_lib[9] = mepa_default_phy_driver_init();
-+        MEPA_phy_lib[10] = mepa_default_phy_driver_init();
+-        MEPA_phy_lib[11] = mepa_default_phy_driver_init();
++        MEPA_phy_lib[12] = mepa_default_phy_driver_init();
  #endif
      }
- 
+     if (conf->dummy_phy_cap > 0) {
 diff --git a/vtss_api/mepa/example/CMakeLists.txt b/vtss_api/mepa/example/CMakeLists.txt
 new file mode 100644
 index 0000000..a82aa5c
@@ -72,15 +83,16 @@ index 0000000..a82aa5c
 +endif()
 diff --git a/vtss_api/mepa/example/example_minimal.c b/vtss_api/mepa/example/example_minimal.c
 new file mode 100644
-index 0000000..cfd99a5
+index 0000000..12b9c92
 --- /dev/null
 +++ b/vtss_api/mepa/example/example_minimal.c
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,107 @@
 +// Copyright (c) 2004-2020 Microchip Technology Inc. and its subsidiaries.
 +// SPDX-License-Identifier: MIT
 +
 +#include <microchip/ethernet/phy/api.h>
 +#include <mepa_driver.h>
++#include <stdio.h>
 +
 +#define ID1   0x123456
 +#define MASK1 0x00ffff
